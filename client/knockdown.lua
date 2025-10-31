@@ -54,8 +54,6 @@ function SetKnockdown(bool)
                     KnockdownTime = KnockdownTime - 1
                     Wait(1000)
                 else
-                    -- Time expired, move to bleeding state - immediately
-                    QBCore.Functions.Notify(Lang:t('info.entering_bleeding'), 'error')
                     SetKnockdown(false)
                     SetLaststand(true)
                     break -- Exit loop immediately
@@ -133,14 +131,13 @@ end)
 -- Event: Someone starts reviving you
 RegisterNetEvent('hospital:client:BeingRevived', function(helperId)
     IsBeingRevived = true
-    local helperName = GetPlayerName(GetPlayerFromServerId(helperId))
-    QBCore.Functions.Notify('You are being helped by ' .. helperName, 'primary')
+    QBCore.Functions.Notify('You are being helped...', 'primary')
 end)
 
 -- Event: Revive was cancelled or failed
 RegisterNetEvent('hospital:client:ReviveFailed', function()
     IsBeingRevived = false
-    QBCore.Functions.Notify('Revive failed! Entering bleeding state...', 'error')
+    QBCore.Functions.Notify('Something went wrong...', 'error')
     SetKnockdown(false)
     SetLaststand(true)
 end)
@@ -170,7 +167,6 @@ RegisterNetEvent('hospital:client:ReviveSuccess', function()
         TriggerServerEvent('hospital:server:SetDeathStatus', false)
         TriggerServerEvent('hospital:server:SetLaststandStatus', false)
 
-        QBCore.Functions.Notify(Lang:t('info.healthy'))
     end
 end)
 
