@@ -97,6 +97,26 @@ CreateThread(function()
     end
 end)
 
+-- Thread to maintain idle animation while being revived (minigame)
+CreateThread(function()
+    while true do
+        if IsBeingRevived and IsKnockedDown then
+            local ped = PlayerPedId()
+            if not IsPedInAnyVehicle(ped, false) then
+                -- Keep the idle animation playing while the minigame is active
+                if not IsEntityPlayingAnim(ped, 'dead', 'dead_d', 3) then
+                    RequestAnimDict('dead')
+                    while not HasAnimDictLoaded('dead') do
+                        Wait(10)
+                    end
+                    TaskPlayAnim(ped, 'dead', 'dead_d', 1.0, 1.0, -1, 1, 0, false, false, false)
+                end
+            end
+        end
+        Wait(100)
+    end
+end)
+
 -- Export for qb-target to check if player is knocked down
 exports('IsPlayerKnockedDown', function(entity)
     local player = PlayerId()
@@ -129,26 +149,58 @@ RegisterNetEvent('hospital:client:ReviveFailed', function()
     SetLaststand(true)
 end)
 
--- Event: Revive successful
+-- Event: Revive successful (knockdown specific - doesn't reset hunger/water/stress)
 RegisterNetEvent('hospital:client:ReviveSuccess', function()
     IsBeingRevived = false
-    SetKnockdown(false)
+    local player = PlayerPedId()
 
-    -- Play the idle animation while being fully revived
-    local ped = PlayerPedId()
-    LoadAnimation('dead')
-    TaskPlayAnim(ped, 'dead', 'dead_d', 1.0, 1.0, -1, 1, 0, false, false, false)
+    if IsKnockedDown then
+        -- Resurrect the player without resetting hunger/water/stress
+        local pos = GetEntityCoords(player, true)
+        NetworkResurrectLocalPlayer(pos.x, pos.y, pos.z, GetEntityHeading(player), true, false)
 
-    Wait(500) -- Brief moment to ensure animation starts
-    TriggerEvent('hospital:client:Revive')
+        SetKnockdown(false)
+        SetLaststand(false)
+        SetEntityInvincible(player, false)
+
+        -- Restore health only, don't reset hunger/water/stress
+        SetEntityMaxHealth(player, 200)
+        SetEntityHealth(player, 200)
+        ClearPedBloodDamage(player)
+        SetPlayerSprint(PlayerId(), true)
+        ResetPedMovementClipset(player, 0.0)
+
+        -- Update server status
+        TriggerServerEvent('hospital:server:SetDeathStatus', false)
+        TriggerServerEvent('hospital:server:SetLaststandStatus', false)
+
+        QBCore.Functions.Notify(Lang:t('info.healthy'))
+    end
 end)
 
 -- Event: Attempt to revive a knocked down player
 RegisterNetEvent('hospital:client:ReviveKnockedDown', function(targetId)
     local ped = PlayerPedId()
 
+    -- Play reviver animation
+    local animDict = 'anim@amb@business@weed@weed_inspecting_lo_med_hi@'
+    RequestAnimDict(animDict)
+    local animLoaded = false
+    CreateThread(function()
+        while not HasAnimDictLoaded(animDict) and not animLoaded do
+            Wait(10)
+        end
+        animLoaded = true
+        if HasAnimDictLoaded(animDict) then
+            TaskPlayAnim(ped, animDict, 'weed_spraybottle_crouch_spraying_01_inspector', 1.0, 8.0, -1, 1, 0, false, false, false)
+        end
+    end)
+
     -- Start ps-ui minigame
-    local success = exports['ps-ui']:Circle(function(success)
+    exports['ps-ui']:Circle(function(success)
+        -- Clear animation
+        ClearPedTasks(ped)
+
         if success then
             TriggerServerEvent('hospital:server:ReviveKnockedDownSuccess', targetId)
         else

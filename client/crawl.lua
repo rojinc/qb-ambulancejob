@@ -1,8 +1,3 @@
--- Crawl System for KNOCKDOWN State ONLY
--- Based on: https://github.com/MadsLeander/crouch_crawl
-
--- Note: IsBeingRevived is a global variable defined in knockdown.lua
-
 IsCrawling = false
 
 -- Animation dictionaries
