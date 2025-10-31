@@ -15,7 +15,6 @@ end
 function SetKnockdown(bool)
     local ped = PlayerPedId()
     if bool then
-        Wait(1000)
         while GetEntitySpeed(ped) > 0.5 or IsPedRagdoll(ped) do Wait(10) end
         local pos = GetEntityCoords(ped)
         local heading = GetEntityHeading(ped)
@@ -51,9 +50,6 @@ function SetKnockdown(bool)
         -- Knockdown timer thread
         CreateThread(function()
             while IsKnockedDown do
-                ped = PlayerPedId()
-                local player = PlayerId()
-
                 if KnockdownTime - 1 > 0 then
                     KnockdownTime = KnockdownTime - 1
                     Wait(1000)
@@ -181,32 +177,26 @@ end)
 -- Event: Attempt to revive a knocked down player
 RegisterNetEvent('hospital:client:ReviveKnockedDown', function(targetId)
     local ped = PlayerPedId()
-
-    -- Play reviver animation
     local animDict = 'anim@amb@business@weed@weed_inspecting_lo_med_hi@'
+    local animName = 'weed_spraybottle_crouch_spraying_01_inspector'
+
+    -- Load and play reviver animation in background
     RequestAnimDict(animDict)
-    local animLoaded = false
     CreateThread(function()
-        while not HasAnimDictLoaded(animDict) and not animLoaded do
+        while not HasAnimDictLoaded(animDict) do
             Wait(10)
         end
-        animLoaded = true
-        if HasAnimDictLoaded(animDict) then
-            TaskPlayAnim(ped, animDict, 'weed_spraybottle_crouch_spraying_01_inspector', 1.0, 8.0, -1, 1, 0, false, false, false)
-        end
+        TaskPlayAnim(ped, animDict, animName, 1.0, 8.0, -1, 1, 0, false, false, false)
     end)
 
-    -- Start ps-ui minigame
-    exports['ps-ui']:Circle(function(success)
-        -- Clear animation
-        ClearPedTasks(ped)
-
-        if success then
-            TriggerServerEvent('hospital:server:ReviveKnockedDownSuccess', targetId)
-        else
-            TriggerServerEvent('hospital:server:ReviveKnockedDownFailed', targetId)
-        end
-    end, 2, 20) -- 2 circles, 20 second timer
+    -- Start minigame (qb-minigames Skillbar)
+    local success = exports['qb-minigames']:Skillbar()
+    ClearPedTasks(ped)
+    if success then
+        TriggerServerEvent('hospital:server:ReviveKnockedDownSuccess', targetId)
+    else
+        TriggerServerEvent('hospital:server:ReviveKnockedDownFailed', targetId)
+    end
 end)
 
 -- Add qb-target interaction for knocked down players

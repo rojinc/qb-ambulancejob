@@ -69,15 +69,13 @@ function SetLaststand(bool)
         TriggerServerEvent('hospital:server:ambulanceAlert', Lang:t('info.civ_down'))
         CreateThread(function()
             while InLaststand do
-                ped = PlayerPedId()
                 local player = PlayerId()
-                if LaststandTime - 1 > Config.MinimumRevive then
+                if LaststandTime - 1 > 0 then
                     LaststandTime = LaststandTime - 1
                     Config.DeathTime = LaststandTime
-                elseif LaststandTime - 1 <= Config.MinimumRevive and LaststandTime - 1 ~= 0 then
-                    LaststandTime = LaststandTime - 1
-                    Config.DeathTime = LaststandTime
-                elseif LaststandTime - 1 <= 0 then
+                    Wait(1000)
+                else
+                    -- Player bled out, transition to death
                     QBCore.Functions.Notify(Lang:t('error.bled_out'), 'error')
                     SetLaststand(false)
                     local killer_2, killerWeapon = NetworkGetEntityKillerOfPlayer(player)
@@ -96,8 +94,8 @@ function SetLaststand(bool)
                     deathTime = 0
                     OnDeath()
                     DeathTimer()
+                    break
                 end
-                Wait(1000)
             end
         end)
     else

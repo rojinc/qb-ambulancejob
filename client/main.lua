@@ -83,7 +83,7 @@ local function IsDamagingEvent(damageDone, weapon)
 end
 
 local function DoLimbAlert()
-    if not isDead and not InLaststand then
+    if not isDead and not InLaststand and not IsKnockedDown then
         if #injured > 0 then
             local limbDamageMsg = ''
             if #injured <= Config.AlertShowInfo then
@@ -102,7 +102,7 @@ local function DoLimbAlert()
 end
 
 local function DoBleedAlert()
-    if not isDead and tonumber(isBleeding) > 0 then
+    if not isDead and not IsKnockedDown and tonumber(isBleeding) > 0 then
         QBCore.Functions.Notify(Lang:t('info.bleed_alert', { bleedstate = Config.BleedingStates[tonumber(isBleeding)].label }), 'error')
     end
 end
@@ -374,7 +374,10 @@ local function CheckDamage(ped, bone, weapon, damageDone)
     if weapon == nil then return end
 
     if Config.Bones[bone] and not isDead and not InLaststand then
-        ApplyImmediateEffects(ped, bone, weapon, damageDone)
+        -- Only apply immediate effects (ragdoll/stagger) if not knocked down
+        if not IsKnockedDown then
+            ApplyImmediateEffects(ped, bone, weapon, damageDone)
+        end
 
         if not BodyParts[Config.Bones[bone]].isDamaged then
             BodyParts[Config.Bones[bone]].isDamaged = true
@@ -396,17 +399,19 @@ local function CheckDamage(ped, bone, weapon, damageDone)
             end
         end
 
-        TriggerServerEvent('hospital:server:SyncInjuries', {
-            limbs = BodyParts,
-            isBleeding = tonumber(isBleeding)
-        })
-
-        ProcessRunStuff(ped)
+        -- Don't sync injuries or alert while knocked down
+        if not IsKnockedDown then
+            TriggerServerEvent('hospital:server:SyncInjuries', {
+                limbs = BodyParts,
+                isBleeding = tonumber(isBleeding)
+            })
+            ProcessRunStuff(ped)
+        end
     end
 end
 
 local function ProcessDamage(ped)
-    if not isDead and not InLaststand and not onPainKillers then
+    if not isDead and not InLaststand and not onPainKillers and not IsKnockedDown then
         for _, v in pairs(injured) do
             if (v.part == 'LLEG' and v.severity > 1) or (v.part == 'RLEG' and v.severity > 1) or (v.part == 'LFOOT' and v.severity > 2) or (v.part == 'RFOOT' and v.severity > 2) then
                 if legCount >= Config.LegInjuryTimer then
