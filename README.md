@@ -14,7 +14,11 @@ The ambulance job now includes a knockdown system that provides an intermediate 
 - **State Management**: Players are disarmed during knockdown and stay immobilized with appropriate animations
 
 ### Demo Video
-[![Knockdown Feature Demo](https://img.shields.io/badge/Watch-Demo%20Video-blue)](https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4)
+
+<video width="100%" controls>
+  <source src="https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4" type="video/mp4">
+  Your browser does not support the video tag. <a href="https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4">Watch the demo video</a>
+</video>
 
 ### Configuration
 The knockdown feature can be configured in `config.lua`:
