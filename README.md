@@ -15,10 +15,7 @@ The ambulance job now includes a knockdown system that provides an intermediate 
 
 ### Demo Video
 
-<video width="100%" controls>
-  <source src="https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4" type="video/mp4">
-  Your browser does not support the video tag. <a href="https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4">Watch the demo video</a>
-</video>
+[![Knockdown Feature Demo](https://img.shields.io/badge/▶️%20PLAY-Demo%20Video-blue?style=for-the-badge&logoColor=white)](https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4)
 
 ### Configuration
 The knockdown feature can be configured in `config.lua`:
