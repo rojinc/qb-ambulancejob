@@ -15,7 +15,9 @@ shared_scripts {
 client_scripts {
 	'client/main.lua',
 	'client/wounding.lua',
+	'client/knockdown.lua',
 	'client/laststand.lua',
+	'client/crawl.lua',
 	'client/job.lua',
 	'client/dead.lua',
 	'@PolyZone/client.lua',

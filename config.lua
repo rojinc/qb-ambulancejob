@@ -7,6 +7,7 @@ Config.RespawnAtNearestHospital = true                       -- Enable or disabl
 Config.Helicopter = 'polmav'                                 -- Helicopter model that players with the ambulance job can use
 Config.BillCost = 2000                                       -- Price that players are charged for using the hospital check-in system
 Config.DeathTime = 300                                       -- How long the timer is for players to bleed out completely and respawn at the hospital
+Config.KnockdownTime = 40                                    -- How long the knockdown state lasts before going to bleeding state
 Config.ReviveInterval = 360                                  -- How long the timer is for players to revive a player in laststand
 Config.MinimumRevive = 300                                   -- How long the timer is for players to revive a player in laststand
 Config.PainkillerInterval = 60                               -- Set the length of time painkillers last (per one)

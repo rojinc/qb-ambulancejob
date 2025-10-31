@@ -121,15 +121,18 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
             PlayerJob = PlayerData.job
             onDuty = PlayerData.job.onduty
             SetPedArmour(PlayerPedId(), PlayerData.metadata['armor'])
-            if (not PlayerData.metadata['inlaststand'] and PlayerData.metadata['isdead']) then
+            if (not PlayerData.metadata['inlaststand'] and not PlayerData.metadata['isknockeddown'] and PlayerData.metadata['isdead']) then
                 deathTime = Config.ReviveInterval
                 OnDeath()
                 DeathTimer()
+            elseif (PlayerData.metadata['isknockeddown'] and not PlayerData.metadata['inlaststand'] and not PlayerData.metadata['isdead']) then
+                SetKnockdown(true)
             elseif (PlayerData.metadata['inlaststand'] and not PlayerData.metadata['isdead']) then
                 SetLaststand(true)
             else
                 TriggerServerEvent('hospital:server:SetDeathStatus', false)
                 TriggerServerEvent('hospital:server:SetLaststandStatus', false)
+                TriggerServerEvent('hospital:server:SetKnockdownStatus', false)
             end
             if PlayerJob.name == 'ambulance' and onDuty then
                 TriggerServerEvent('hospital:server:AddDoctor', PlayerJob.name)

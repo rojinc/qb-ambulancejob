@@ -105,8 +105,14 @@ AddEventHandler('gameEventTriggered', function(event, data)
         local victim, attacker, victimDied, weapon = data[1], data[2], data[4], data[7]
         if not IsEntityAPed(victim) then return end
         if victimDied and NetworkGetPlayerIndexFromPed(victim) == PlayerId() and IsEntityDead(PlayerPedId()) then
-            if not InLaststand then
+            -- First death: Go to knockdown state
+            if not IsKnockedDown and not InLaststand then
+                SetKnockdown(true)
+            -- Second death while in knockdown: Go to bleeding state
+            elseif IsKnockedDown and not InLaststand and not isDead then
+                SetKnockdown(false)
                 SetLaststand(true)
+            -- Third death while in bleeding: Go to death state
             elseif InLaststand and not isDead then
                 SetLaststand(false)
                 local playerid = NetworkGetPlayerIndexFromPed(victim)
@@ -131,26 +137,37 @@ emsNotified = false
 CreateThread(function()
     while true do
         local sleep = 1000
-        if isDead or InLaststand then
+        if isDead or InLaststand or IsKnockedDown then
             sleep = 5
             local ped = PlayerPedId()
             if IsPauseMenuActive() then
                 SetFrontendActive(false)
             end
             DisableAllControlActions(0)
-            EnableControlAction(0, 1, true)
-            EnableControlAction(0, 2, true)
-            EnableControlAction(0, 245, true)
-            EnableControlAction(0, 38, true)
-            EnableControlAction(0, 0, true)
-            EnableControlAction(0, 322, true)
-            EnableControlAction(0, 288, true)
-            EnableControlAction(0, 213, true)
-            EnableControlAction(0, 249, true)
-            EnableControlAction(0, 46, true)
-            EnableControlAction(0, 47, true)
+            EnableControlAction(0, 1, true)    -- Camera X-axis
+            EnableControlAction(0, 2, true)    -- Camera Y-axis
+            EnableControlAction(0, 245, true)  -- Chat (T)
+            EnableControlAction(0, 38, true)   -- E (respawn)
+            EnableControlAction(0, 249, true)  -- Push to Talk (N)
+            EnableControlAction(0, 46, true)   -- E (alternate)
+            EnableControlAction(0, 47, true)   -- G (call EMS)
 
-            if isDead then
+            -- Enable WAD movement for knockdown state
+            if IsKnockedDown then
+                EnableControlAction(0, 32, true)  -- W (forward)
+                EnableControlAction(0, 34, true)  -- A (left)
+                EnableControlAction(0, 35, true)  -- D (right)
+            end
+
+            if IsKnockedDown then
+                -- Knockdown state UI with crawl controls
+                if IsBeingRevived then
+                    DrawTxt(0.93, 1.44, 1.0, 1.0, 0.6, '~g~You are being helped...~w~', 255, 255, 255, 255)
+                    DrawTxt(0.93, 1.40, 1.0, 1.0, 0.5, 'Stay still and wait for assistance', 255, 255, 255, 255)
+                else
+                    DrawTxt(0.93, 1.44, 1.0, 1.0, 0.6, 'KNOCKDOWN - Time remaining: ~r~' .. math.ceil(KnockdownTime) .. '~w~ seconds', 255, 255, 255, 255)
+                end
+            elseif isDead then
                 if not isInHospitalBed then
                     if deathTime > 0 then
                         DrawTxt(0.93, 1.44, 1.0, 1.0, 0.6, Lang:t('info.respawn_txt', { deathtime = math.ceil(deathTime) }), 255, 255, 255, 255)
@@ -179,17 +196,21 @@ CreateThread(function()
                 end
 
                 SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
+            elseif IsKnockedDown then
+                -- All knockdown animations handled by crawl.lua
+                SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
             elseif InLaststand then
                 sleep = 5
 
+                -- Bleeding state UI (NO crawling allowed here)
                 if LaststandTime > Config.MinimumRevive then
                     DrawTxt(0.94, 1.44, 1.0, 1.0, 0.6, Lang:t('info.bleed_out', { time = math.ceil(LaststandTime) }), 255, 255, 255, 255)
                 else
                     DrawTxt(0.845, 1.44, 1.0, 1.0, 0.6, Lang:t('info.bleed_out_help', { time = math.ceil(LaststandTime) }), 255, 255, 255, 255)
                     if not emsNotified then
-                        DrawTxt(0.91, 1.40, 1.0, 1.0, 0.6, Lang:t('info.request_help'), 255, 255, 255, 255)
+                        DrawTxt(0.91, 1.36, 1.0, 1.0, 0.6, Lang:t('info.request_help'), 255, 255, 255, 255)
                     else
-                        DrawTxt(0.90, 1.40, 1.0, 1.0, 0.6, Lang:t('info.help_requested'), 255, 255, 255, 255)
+                        DrawTxt(0.90, 1.36, 1.0, 1.0, 0.6, Lang:t('info.help_requested'), 255, 255, 255, 255)
                     end
 
                     if IsControlJustPressed(0, 47) and not emsNotified then
@@ -198,16 +219,17 @@ CreateThread(function()
                     end
                 end
 
+                -- Bleeding state - player just lies there, NO movement allowed
                 if not isEscorted then
                     if IsPedInAnyVehicle(ped, false) then
                         loadAnimDict('veh@low@front_ps@idle_duck')
                         if not IsEntityPlayingAnim(ped, 'veh@low@front_ps@idle_duck', 'sit', 3) then
-                            TaskPlayAnim(ped, 'veh@low@front_ps@idle_duck', 'sit', 1.0, 1.0, -1, 1, 0, 0, 0, 0)
+                            TaskPlayAnim(ped, 'veh@low@front_ps@idle_duck', 'sit', 1.0, 1.0, -1, 1, 0, false, false, false)
                         end
                     else
                         loadAnimDict(lastStandDict)
                         if not IsEntityPlayingAnim(ped, lastStandDict, lastStandAnim, 3) then
-                            TaskPlayAnim(ped, lastStandDict, lastStandAnim, 1.0, 1.0, -1, 1, 0, 0, 0, 0)
+                            TaskPlayAnim(ped, lastStandDict, lastStandAnim, 1.0, 1.0, -1, 1, 0, false, false, false)
                         end
                     end
                 else

@@ -540,11 +540,14 @@ end)
 RegisterNetEvent('hospital:client:Revive', function()
     local player = PlayerPedId()
 
-    if isDead or InLaststand then
+    if isDead or InLaststand or IsKnockedDown then
         local pos = GetEntityCoords(player, true)
         NetworkResurrectLocalPlayer(pos.x, pos.y, pos.z, GetEntityHeading(player), true, false)
         isDead = false
         SetEntityInvincible(player, false)
+        if IsKnockedDown then
+            SetKnockdown(false)
+        end
         SetLaststand(false)
     end
 

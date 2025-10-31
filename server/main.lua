@@ -141,6 +141,59 @@ RegisterNetEvent('hospital:server:SetLaststandStatus', function(bool)
 	end
 end)
 
+RegisterNetEvent('hospital:server:SetKnockdownStatus', function(bool)
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
+	if Player then
+		Player.Functions.SetMetaData('isknockeddown', bool)
+	end
+end)
+
+-- Callback to check if player is knocked down
+QBCore.Functions.CreateCallback('hospital:server:IsPlayerKnockedDown', function(source, cb, targetId)
+	local Player = QBCore.Functions.GetPlayer(targetId)
+	if Player then
+		cb(Player.PlayerData.metadata['isknockeddown'] or false)
+	else
+		cb(false)
+	end
+end)
+
+-- Event: Player attempts to revive knocked down player
+RegisterNetEvent('hospital:server:AttemptReviveKnockedDown', function(targetId)
+	local src = source
+	local Target = QBCore.Functions.GetPlayer(targetId)
+
+	if Target and Target.PlayerData.metadata['isknockeddown'] then
+		-- Notify the knocked down player
+		TriggerClientEvent('hospital:client:BeingRevived', targetId, src)
+		-- Start the minigame for the helper
+		TriggerClientEvent('hospital:client:ReviveKnockedDown', src, targetId)
+	end
+end)
+
+-- Event: Revive minigame succeeded
+RegisterNetEvent('hospital:server:ReviveKnockedDownSuccess', function(targetId)
+	local src = source
+	local Target = QBCore.Functions.GetPlayer(targetId)
+
+	if Target then
+		TriggerClientEvent('hospital:client:ReviveSuccess', targetId)
+		TriggerClientEvent('QBCore:Notify', src, 'Successfully revived player!', 'success')
+	end
+end)
+
+-- Event: Revive minigame failed
+RegisterNetEvent('hospital:server:ReviveKnockedDownFailed', function(targetId)
+	local src = source
+	local Target = QBCore.Functions.GetPlayer(targetId)
+
+	if Target then
+		TriggerClientEvent('hospital:client:ReviveFailed', targetId)
+		TriggerClientEvent('QBCore:Notify', src, 'Revive failed!', 'error')
+	end
+end)
+
 RegisterNetEvent('hospital:server:SetArmor', function(amount)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
