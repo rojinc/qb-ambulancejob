@@ -1,10 +1,28 @@
-# qb-ambulancejob
-EMS Job and Death/Wound Logic for QB-Core Framework with Kockdown Feature :ambulance:
+<h1 align="center">
+  QBCore Ambulance Job
+  <br>
+</h1>
+
+[![Watch Demo](https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4)](https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4)
+
+<h4 align="center">EMS Job and Death/Wound Logic for QBCore Framework with Knockdown Feature</h4>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#knockdown-system">Knockdown System</a> •
+  <a href="#configuration">Configuration</a> •
+  <a href="#dependencies">Dependencies</a> •
+  <a href="#setup">Setup</a> •
+  <a href="#license">License</a>
+</p>
+
+---
 
 ## Features
 
-### Knockdown State
-The ambulance job now includes a knockdown system that provides an intermediate state between full health and critical bleeding:
+### Knockdown System
+
+The ambulance job now includes a complete knockdown system that provides an intermediate state between full health and critical bleeding:
 
 - **Knockdown Mechanics**: When players take damage, they enter a knockdown state instead of immediately going to laststand/bleeding
 - **Duration**: Players remain knocked down for a configurable duration (default: 40 seconds) before transitioning to bleeding state
@@ -13,36 +31,50 @@ The ambulance job now includes a knockdown system that provides an intermediate 
 - **Damage During Knockdown**: Taking any damage while knocked down immediately transitions the player to bleeding state
 - **State Management**: Players are disarmed during knockdown and stay immobilized with appropriate animations
 
-### Demo Video
-
-[![Knockdown Feature Demo]](https://r2.fivemanage.com/mCsNNhSbyC8uNtlPhbsr0/2025-10-3118-26-58.mp4)
-
 ### Configuration
+
 The knockdown feature can be configured in `config.lua`:
-- `Config.KnockdownTime` - Duration of knockdown state in seconds (default: 40)
-- `Config.ReviveInterval` - Timer for reviving players in laststand (default: 360 seconds)
-- `Config.MinimumRevive` - Minimum time for laststand revive (default: 300 seconds)
+
+```lua
+Config.KnockdownTime = 40       -- How long the knockdown state lasts before going to bleeding state
+Config.ReviveInterval = 360     -- How long the timer is for players to revive a player in laststand
+Config.MinimumRevive = 300      -- How long the timer is for players to revive a player in laststand
+```
 
 ## Dependencies
+
 - [qb-core](https://github.com/qbcore-framework/qb-core) (Required)
 - [qb-phone](https://github.com/qbcore-framework/qb-phone) (Required)
 - [qb-target](https://github.com/BerkieBb/qb-target) (Optional)
 - [PolyZone](https://github.com/mkafrin/PolyZone) (Required)
 - [qb-minigames](https://github.com/qbcore-framework/qb-minigames) (Required for knockdown revive skillbar)
 
-# Server.cfg Convar Update
-- Global DrawTextUi Option
-```
-setr UseTarget false
-``` 
+## Setup
 
-- Global Target Option
+### Server Configuration
+
+Add the following to your `server.cfg` to configure the target system:
+
 ```
+# Global DrawTextUi Option (Default)
+setr UseTarget false
+
+# Alternative: Global Target Option (qb-target)
 setr UseTarget true
 ```
 
+### Installation
 
-# License
+1. Download and extract the resource into your `resources` folder
+2. Ensure it's started in your `server.cfg`:
+   ```
+   ensure qb-ambulancejob
+   ```
+3. Restart your server
+
+---
+
+## License
 
     QBCore Framework
     Copyright (C) 2021 Joshua Eger
