@@ -1,13 +1,15 @@
 name: Lint
-on: [push, pull_request_target]
+# pull_request (not pull_request_target) so code from forks never runs with this repo's token
+on: [push, pull_request]
+permissions:
+  contents: read
+  checks: write
 jobs:
   lint:
     name: Lint Resource
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/checkout@v4
       - name: Lint
         uses: iLLeniumStudios/fivem-lua-lint-action@v2
         with:
@@ -16,7 +18,9 @@ jobs:
           extra_libs: mysql+polyzone+qblocales
       - name: Generate Lint Report
         if: always()
-        uses: mikepenz/action-junit-report@v3
+        # Fork PRs get a read-only token, so the report can't be posted there
+        continue-on-error: true
+        uses: mikepenz/action-junit-report@v4
         with:
           report_paths: "**/junit.xml"
           check_name: Linting Report
