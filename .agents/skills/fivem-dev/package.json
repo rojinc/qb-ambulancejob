@@ -1,0 +1,50 @@
+{
+  "name": "claude-fivem-dev",
+  "version": "1.0.4",
+  "description": "Claude Code plugin for FiveM development - QBox, QBCore, ESX frameworks with dynamic documentation fetching",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "fivem",
+    "gta5",
+    "qbox",
+    "qbcore",
+    "esx",
+    "lua",
+    "gamedev",
+    "roleplay"
+  ],
+  "author": {
+    "name": "Melih Bozkurt",
+    "url": "https://github.com/melihbozkurt10"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/melihbozkurt10/fivem-dev-plugin.git"
+  },
+  "homepage": "https://github.com/melihbozkurt10/fivem-dev-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/melihbozkurt10/fivem-dev-plugin/issues"
+  },
+  "files": [
+    ".claude-plugin/",
+    ".cursorrules",
+    "commands/",
+    "skills/",
+    "frameworks/",
+    "scripting/",
+    "resources/",
+    "assets/",
+    "scripts/",
+    "SKILL.md",
+    "FIVEM_CURSOR_RULES.md",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

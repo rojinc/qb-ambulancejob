@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "fivem-dev": {
+      "source": "melihbozkurt10/fivem-dev-plugin",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "8388c13f7fc2742d2607666c0af9cb42bbb6e6de176d918e3f2983572b7f9aa8"
+    }
+  }
+}
