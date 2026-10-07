@@ -1,44 +1,51 @@
 local PlayerJob = {}
 local onDuty = false
 local currentGarage = 0
-local currentHospital
 
 -- Functions
 
-local function GetClosestPlayer()
-    local closestPlayers = QBCore.Functions.GetPlayersFromCoords()
-    local closestDistance = -1
-    local closestPlayer = -1
-    local coords = GetEntityCoords(PlayerPedId())
+local function GetVehicleFromNetId(netId)
+    if not netId then return 0 end
+    local timeout = GetGameTimer() + 5000
+    while not NetworkDoesEntityExistWithNetworkId(netId) and GetGameTimer() < timeout do
+        Wait(10)
+    end
+    return NetToVeh(netId)
+end
 
-    for i = 1, #closestPlayers, 1 do
-        if closestPlayers[i] ~= PlayerId() then
-            local pos = GetEntityCoords(GetPlayerPed(closestPlayers[i]))
-            local distance = #(pos - coords)
+local function SetFullFuel(veh)
+    if GetResourceState(Config.FuelResource) == 'started' then
+        exports[Config.FuelResource]:SetFuel(veh, 100.0)
+    end
+end
 
-            if closestDistance == -1 or closestDistance > distance then
-                closestPlayer = closestPlayers[i]
-                closestDistance = distance
-            end
+local function IsJobVehicle(veh)
+    local model = GetEntityModel(veh)
+    if model == joaat(Config.Helicopter) then return true end
+    for _, vehicles in pairs(Config.AuthorizedVehicles) do
+        for vehicleName in pairs(vehicles) do
+            if model == joaat(vehicleName) then return true end
         end
     end
-    return closestPlayer, closestDistance
+    return false
 end
 
 function TakeOutVehicle(vehicleInfo)
     local coords = Config.Locations['vehicle'][currentGarage]
-    QBCore.Functions.TriggerCallback('QBCore:Server:SpawnVehicle', function(netId)
-        local veh = NetToVeh(netId)
+    -- The server checks the job, duty, grade and distance before spawning
+    QBCore.Functions.TriggerCallback('hospital:server:SpawnVehicle', function(netId)
+        local veh = GetVehicleFromNetId(netId)
+        if veh == 0 then return end
         SetVehicleNumberPlateText(veh, Lang:t('info.amb_plate') .. tostring(math.random(1000, 9999)))
         SetEntityHeading(veh, coords.w)
-        exports['LegacyFuel']:SetFuel(veh, 100.0)
+        SetFullFuel(veh)
         TaskWarpPedIntoVehicle(PlayerPedId(), veh, -1)
         if Config.VehicleSettings[vehicleInfo] ~= nil then
             QBCore.Shared.SetDefaultVehicleExtras(veh, Config.VehicleSettings[vehicleInfo].extras)
         end
         TriggerEvent('vehiclekeys:client:SetOwner', QBCore.Functions.GetPlate(veh))
         SetVehicleEngineOn(veh, true, true)
-    end, vehicleInfo, coords, true)
+    end, vehicleInfo, currentGarage, false)
 end
 
 local function getAuthorizedVehicles(grade)
@@ -92,24 +99,19 @@ RegisterNetEvent('ambulance:client:TakeOutVehicle', function(data)
     TakeOutVehicle(vehicle)
 end)
 
+-- The doctor count is kept up to date by the server from the job and duty data
 RegisterNetEvent('QBCore:Client:OnJobUpdate', function(JobInfo)
     PlayerJob = JobInfo
-    if PlayerJob.name == 'ambulance' then
-        onDuty = PlayerJob.onduty
-        if PlayerJob.onduty then
-            TriggerServerEvent('hospital:server:AddDoctor', PlayerJob.name)
-        else
-            TriggerServerEvent('hospital:server:RemoveDoctor', PlayerJob.name)
-        end
-    end
+    onDuty = PlayerJob.onduty
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     exports.spawnmanager:setAutoSpawn(false)
-    local ped = PlayerPedId()
-    local player = PlayerId()
     CreateThread(function()
         Wait(5000)
+        -- Get the ped after the wait, it can change while the character loads
+        local ped = PlayerPedId()
+        local player = PlayerId()
         SetEntityMaxHealth(ped, 200)
         SetEntityHealth(ped, 200)
         SetPlayerHealthRechargeMultiplier(player, 0.0)
@@ -120,7 +122,7 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
         QBCore.Functions.GetPlayerData(function(PlayerData)
             PlayerJob = PlayerData.job
             onDuty = PlayerData.job.onduty
-            SetPedArmour(PlayerPedId(), PlayerData.metadata['armor'])
+            SetPedArmour(PlayerPedId(), PlayerData.metadata['armor'] or 0)
             if (not PlayerData.metadata['inlaststand'] and not PlayerData.metadata['isknockeddown'] and PlayerData.metadata['isdead']) then
                 deathTime = Config.ReviveInterval
                 OnDeath()
@@ -134,28 +136,11 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
                 TriggerServerEvent('hospital:server:SetLaststandStatus', false)
                 TriggerServerEvent('hospital:server:SetKnockdownStatus', false)
             end
-            if PlayerJob.name == 'ambulance' and onDuty then
-                TriggerServerEvent('hospital:server:AddDoctor', PlayerJob.name)
-            end
         end)
     end)
 end)
 
-RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
-    if PlayerJob.name == 'ambulance' and onDuty then
-        TriggerServerEvent('hospital:server:RemoveDoctor', PlayerJob.name)
-    end
-end)
-
 RegisterNetEvent('QBCore:Client:SetDuty', function(duty)
-    if PlayerJob.name == 'ambulance' and duty ~= onDuty then
-        if duty then
-            TriggerServerEvent('hospital:server:AddDoctor', PlayerJob.name)
-        else
-            TriggerServerEvent('hospital:server:RemoveDoctor', PlayerJob.name)
-        end
-    end
-
     onDuty = duty
 end)
 
@@ -187,40 +172,50 @@ function Status()
     end
 end
 
+local function StatusMessage(text)
+    TriggerEvent('chat:addMessage', {
+        color = { 255, 0, 0 },
+        multiline = false,
+        args = { Lang:t('info.status'), text }
+    })
+end
+
 RegisterNetEvent('hospital:client:CheckStatus', function()
-    local player, distance = GetClosestPlayer()
+    local player, distance = QBCore.Functions.GetClosestPlayer()
     if player ~= -1 and distance < 5.0 then
         local playerId = GetPlayerServerId(player)
         QBCore.Functions.TriggerCallback('hospital:GetPlayerStatus', function(result)
-            if result then
-                for k, v in pairs(result) do
-                    if k ~= 'BLEED' and k ~= 'WEAPONWOUNDS' then
-                        statusChecks[#statusChecks + 1] = {
-                            bone = Config.BoneIndexes[k],
-                            label = v.label .. ' (' .. Config.WoundStates[v.severity] .. ')'
-                        }
-                    elseif result['WEAPONWOUNDS'] then
-                        for _, v2 in pairs(result['WEAPONWOUNDS']) do
-                            TriggerEvent('chat:addMessage', {
-                                color = { 255, 0, 0 },
-                                multiline = false,
-                                args = { Lang:t('info.status'), QBCore.Shared.Weapons[v2].damagereason }
-                            })
+            if not result then return end
+            statusChecks = {}
+            local isHealthy = true
+            for k, v in pairs(result) do
+                if k == 'BLEED' then
+                    isHealthy = false
+                    StatusMessage(Lang:t('info.is_status', { status = Config.BleedingStates[v].label }))
+                elseif k == 'WEAPONWOUNDS' then
+                    for _, weapon in pairs(v) do
+                        isHealthy = false
+                        local weaponInfo = QBCore.Shared.Weapons[weapon]
+                        if weaponInfo then
+                            StatusMessage(weaponInfo.damagereason)
                         end
-                    elseif result['BLEED'] > 0 then
-                        TriggerEvent('chat:addMessage', {
-                            color = { 255, 0, 0 },
-                            multiline = false,
-                            args = { Lang:t('info.status'),
-                                Lang:t('info.is_status', { status = Config.BleedingStates[v].label }) }
-                        })
-                    else
-                        QBCore.Functions.Notify(Lang:t('success.healthy_player'), 'success')
                     end
+                else
+                    isHealthy = false
+                    statusChecks[#statusChecks + 1] = {
+                        bone = Config.BoneIndexes[k],
+                        label = v.label .. ' (' .. Config.WoundStates[v.severity] .. ')'
+                    }
                 end
-                isStatusChecking = true
-                Status()
             end
+
+            if isHealthy then
+                QBCore.Functions.Notify(Lang:t('success.healthy_player'), 'success')
+                return
+            end
+            isStatusChecking = true
+            statusCheckTime = 60
+            Status()
         end, playerId)
     else
         QBCore.Functions.Notify(Lang:t('error.no_player'), 'error')
@@ -230,7 +225,7 @@ end)
 RegisterNetEvent('hospital:client:RevivePlayer', function()
     local hasItem = QBCore.Functions.HasItem('firstaid')
     if hasItem then
-        local player, distance = GetClosestPlayer()
+        local player, distance = QBCore.Functions.GetClosestPlayer()
         if player ~= -1 and distance < 5.0 then
             local playerId = GetPlayerServerId(player)
             QBCore.Functions.Progressbar('hospital_revive', Lang:t('progress.revive'), 5000, false, true, {
@@ -261,7 +256,7 @@ end)
 RegisterNetEvent('hospital:client:TreatWounds', function()
     local hasItem = QBCore.Functions.HasItem('bandage')
     if hasItem then
-        local player, distance = GetClosestPlayer()
+        local player, distance = QBCore.Functions.GetClosestPlayer()
         if player ~= -1 and distance < 5.0 then
             local playerId = GetPlayerServerId(player)
             QBCore.Functions.Progressbar('hospital_healwounds', Lang:t('progress.healing'), 5000, false, true, {
@@ -289,8 +284,40 @@ RegisterNetEvent('hospital:client:TreatWounds', function()
     end
 end)
 
+local function UseElevator(destination, index)
+    local coords = Config.Locations[destination][index]
+    if not coords then return end
+    local ped = PlayerPedId()
+    DoScreenFadeOut(500)
+    while not IsScreenFadedOut() do Wait(10) end
+    SetEntityCoords(ped, coords.x, coords.y, coords.z, false, false, false, false)
+    if coords.w then
+        SetEntityHeading(ped, coords.w)
+    end
+    Wait(100)
+    DoScreenFadeIn(1000)
+end
+
+-- Works out which elevator the player is using: qb-target passes its option table,
+-- the zone controls pass the index, anything else falls back to the closest one
+local function GetElevatorIndex(data, location)
+    if type(data) == 'table' and data.index then return data.index end
+    if type(data) == 'number' then return data end
+
+    local coords = GetEntityCoords(PlayerPedId())
+    local closest, lowestDist = 1, nil
+    for i = 1, #Config.Locations[location] do
+        local v = Config.Locations[location][i]
+        local dist = #(coords - vector3(v.x, v.y, v.z))
+        if not lowestDist or dist < lowestDist then
+            closest, lowestDist = i, dist
+        end
+    end
+    return closest
+end
+
 local check = false
-local function EMSControls(variable)
+local function EMSControls(variable, index)
     CreateThread(function()
         check = true
         while check do
@@ -305,14 +332,22 @@ local function EMSControls(variable)
                 elseif variable == 'takeheli' then
                     TriggerEvent('qb-ambulancejob:pullheli')
                 elseif variable == 'roof' then
-                    TriggerEvent('qb-ambulancejob:elevator_main')
+                    TriggerEvent('qb-ambulancejob:elevator_main', index)
                 elseif variable == 'main' then
-                    TriggerEvent('qb-ambulancejob:elevator_roof')
+                    TriggerEvent('qb-ambulancejob:elevator_roof', index)
                 end
             end
             Wait(1)
         end
     end)
+end
+
+-- Stores the vehicle the player is driving, but only if it is a job vehicle
+local function StoreJobVehicle(ped)
+    local veh = GetVehiclePedIsIn(ped, false)
+    if IsJobVehicle(veh) and GetPedInVehicleSeat(veh, -1) == ped then
+        QBCore.Functions.DeleteVehicle(veh)
+    end
 end
 
 local CheckVehicle = false
@@ -325,11 +360,10 @@ local function EMSVehicle(k)
                 CheckVehicle = false
                 local ped = PlayerPedId()
                 if IsPedInAnyVehicle(ped, false) then
-                    QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(ped))
+                    StoreJobVehicle(ped)
                 else
-                    local currentVehicle = k
-                    MenuGarage(currentVehicle)
-                    currentGarage = currentVehicle
+                    currentGarage = k
+                    MenuGarage()
                 end
             end
             Wait(1)
@@ -347,20 +381,20 @@ local function EMSHelicopter(k)
                 CheckHeli = false
                 local ped = PlayerPedId()
                 if IsPedInAnyVehicle(ped, false) then
-                    QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(ped))
+                    StoreJobVehicle(ped)
                 else
-                    local currentHelictoper = k
-                    local coords = Config.Locations['helicopter'][currentHelictoper]
-                    QBCore.Functions.TriggerCallback('QBCore:Server:SpawnVehicle', function(netId)
-                        local veh = NetToVeh(netId)
+                    local coords = Config.Locations['helicopter'][k]
+                    QBCore.Functions.TriggerCallback('hospital:server:SpawnVehicle', function(netId)
+                        local veh = GetVehicleFromNetId(netId)
+                        if veh == 0 then return end
                         SetVehicleNumberPlateText(veh, Lang:t('info.heli_plate') .. tostring(math.random(1000, 9999)))
                         SetEntityHeading(veh, coords.w)
                         SetVehicleLivery(veh, 1) -- Ambulance Livery
-                        exports['LegacyFuel']:SetFuel(veh, 100.0)
+                        SetFullFuel(veh)
                         TaskWarpPedIntoVehicle(PlayerPedId(), veh, -1)
                         TriggerEvent('vehiclekeys:client:SetOwner', QBCore.Functions.GetPlate(veh))
                         SetVehicleEngineOn(veh, true, true, false)
-                    end, Config.Helicopter, coords, true)
+                    end, Config.Helicopter, k, true)
                 end
             end
             Wait(1)
@@ -368,32 +402,14 @@ local function EMSHelicopter(k)
     end)
 end
 
-RegisterNetEvent('qb-ambulancejob:elevator_roof', function()
-    local ped = PlayerPedId()
-    for i = 1, #Config.Locations['roof'] do
-        DoScreenFadeOut(500)
-        while not IsScreenFadedOut() do Wait(10) end
-        currentHospital = i
-        local coords = Config.Locations['main'][currentHospital]
-        SetEntityCoords(ped, coords.x, coords.y, coords.z, false, false, false, false)
-        SetEntityHeading(ped, coords.w)
-        Wait(100)
-        DoScreenFadeIn(1000)
-    end
+-- On the roof: take the elevator down to the main floor
+RegisterNetEvent('qb-ambulancejob:elevator_roof', function(data)
+    UseElevator('main', GetElevatorIndex(data, 'roof'))
 end)
 
-RegisterNetEvent('qb-ambulancejob:elevator_main', function()
-    local ped = PlayerPedId()
-    for i = 1, #Config.Locations['main'] do
-        DoScreenFadeOut(500)
-        while not IsScreenFadedOut() do Wait(10) end
-        currentHospital = i
-        local coords = Config.Locations['roof'][currentHospital]
-        SetEntityCoords(ped, coords.x, coords.y, coords.z, false, false, false, false)
-        SetEntityHeading(ped, coords.w)
-        Wait(100)
-        DoScreenFadeIn(1000)
-    end
+-- On the main floor: take the elevator up to the roof
+RegisterNetEvent('qb-ambulancejob:elevator_main', function(data)
+    UseElevator('roof', GetElevatorIndex(data, 'main'))
 end)
 
 RegisterNetEvent('EMSToggle:Duty', function()
@@ -461,7 +477,7 @@ if Config.UseTarget then
                         type = 'client',
                         event = 'EMSToggle:Duty',
                         icon = 'fa fa-clipboard',
-                        label = 'Sign In/Off duty',
+                        label = Lang:t('text.duty'),
                         job = 'ambulance'
                     }
                 },
@@ -482,7 +498,7 @@ if Config.UseTarget then
                         type = 'server',
                         event = 'qb-ambulancejob:server:stash',
                         icon = 'fa fa-hand',
-                        label = 'Open Stash',
+                        label = Lang:t('text.pstash'),
                         job = 'ambulance'
                     }
                 },
@@ -503,8 +519,9 @@ if Config.UseTarget then
                         type = 'client',
                         event = 'qb-ambulancejob:elevator_roof',
                         icon = 'fas fa-hand-point-up',
-                        label = 'Take Elevator',
-                        job = 'ambulance'
+                        label = Lang:t('text.elevator'),
+                        job = 'ambulance',
+                        index = i,
                     },
                 },
                 distance = 8
@@ -524,8 +541,9 @@ if Config.UseTarget then
                         type = 'client',
                         event = 'qb-ambulancejob:elevator_main',
                         icon = 'fas fa-hand-point-up',
-                        label = 'Take Elevator',
-                        job = 'ambulance'
+                        label = Lang:t('text.elevator'),
+                        job = 'ambulance',
+                        index = i,
                     },
                 },
                 distance = 8
@@ -596,17 +614,18 @@ else
                 heading = 70,
                 minZ = v.z - 2,
                 maxZ = v.z + 2,
+                data = { index = i },
             })
         end
 
         local roofCombo = ComboZone:Create(roofPoly, { name = 'roofCombo', debugPoly = false })
-        roofCombo:onPlayerInOut(function(isPointInside)
-            if isPointInside and PlayerJob.name == 'ambulance' then
+        roofCombo:onPlayerInOut(function(isPointInside, _, zone)
+            if isPointInside and zone and PlayerJob.name == 'ambulance' then
                 if onDuty then
                     exports['qb-core']:DrawText(Lang:t('text.elevator_main'), 'left')
-                    EMSControls('main')
+                    EMSControls('main', zone.data.index)
                 else
-                    exports['qb-core']:DrawText(Lang:t('error.not_ems'), 'left')
+                    exports['qb-core']:DrawText(Lang:t('error.not_on_duty'), 'left')
                 end
             else
                 check = false
@@ -623,17 +642,18 @@ else
                 heading = 70,
                 minZ = v.z - 2,
                 maxZ = v.z + 2,
+                data = { index = i },
             })
         end
 
         local mainCombo = ComboZone:Create(mainPoly, { name = 'mainPoly', debugPoly = false })
-        mainCombo:onPlayerInOut(function(isPointInside)
-            if isPointInside and PlayerJob.name == 'ambulance' then
+        mainCombo:onPlayerInOut(function(isPointInside, _, zone)
+            if isPointInside and zone and PlayerJob.name == 'ambulance' then
                 if onDuty then
                     exports['qb-core']:DrawText(Lang:t('text.elevator_roof'), 'left')
-                    EMSControls('roof')
+                    EMSControls('roof', zone.data.index)
                 else
-                    exports['qb-core']:DrawText(Lang:t('error.not_ems'), 'left')
+                    exports['qb-core']:DrawText(Lang:t('error.not_on_duty'), 'left')
                 end
             else
                 check = false

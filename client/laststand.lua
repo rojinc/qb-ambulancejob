@@ -1,78 +1,43 @@
-Laststand = Laststand or {}
 InLaststand = false
 LaststandTime = 0
 lastStandDict = 'combat@damage@writhe'
 lastStandAnim = 'writhe_loop'
 isEscorted = false
 local isEscorting = false
+local isEnteringLaststand = false
 
 -- Functions
-
-local function GetClosestPlayer()
-    local closestPlayers = QBCore.Functions.GetPlayersFromCoords()
-    local closestDistance = -1
-    local closestPlayer = -1
-    local coords = GetEntityCoords(PlayerPedId())
-
-    for i = 1, #closestPlayers, 1 do
-        if closestPlayers[i] ~= PlayerId() then
-            local pos = GetEntityCoords(GetPlayerPed(closestPlayers[i]))
-            local distance = #(pos - coords)
-
-            if closestDistance == -1 or closestDistance > distance then
-                closestPlayer = closestPlayers[i]
-                closestDistance = distance
-            end
-        end
-    end
-
-    return closestPlayer, closestDistance
-end
-
-local function LoadAnimation(dict)
-    while not HasAnimDictLoaded(dict) do
-        RequestAnimDict(dict)
-        Wait(100)
-    end
-end
 
 function SetLaststand(bool)
     local ped = PlayerPedId()
     if bool then
+        -- Stops a second call from starting another bleed out timer
+        if InLaststand or isEnteringLaststand then return end
+        isEnteringLaststand = true
         while GetEntitySpeed(ped) > 0.5 or IsPedRagdoll(ped) do Wait(10) end
-        local pos = GetEntityCoords(ped)
-        local heading = GetEntityHeading(ped)
+        -- Revived while falling, so don't go down after all
+        if not isEnteringLaststand then return end
         TriggerServerEvent('InteractSound_SV:PlayOnSource', 'demo', 0.1)
         LaststandTime = Config.ReviveInterval
-        if IsPedInAnyVehicle(ped) then
-            local veh = GetVehiclePedIsIn(ped)
-            local vehseats = GetVehicleModelNumberOfSeats(GetHashKey(GetEntityModel(veh)))
-            for i = -1, vehseats do
-                local occupant = GetPedInVehicleSeat(veh, i)
-                if occupant == ped then
-                    NetworkResurrectLocalPlayer(pos.x, pos.y, pos.z + 0.5, heading, true, false)
-                    SetPedIntoVehicle(ped, veh, i)
-                end
-            end
-        else
-            NetworkResurrectLocalPlayer(pos.x, pos.y, pos.z + 0.5, heading, true, false)
-        end
+        ResurrectPlayer(ped)
         SetEntityHealth(ped, 150)
         if IsPedInAnyVehicle(ped, false) then
-            LoadAnimation('veh@low@front_ps@idle_duck')
+            LoadAnimDict('veh@low@front_ps@idle_duck')
             TaskPlayAnim(ped, 'veh@low@front_ps@idle_duck', 'sit', 1.0, 8.0, -1, 1, -1, false, false, false)
         else
-            LoadAnimation(lastStandDict)
+            LoadAnimDict(lastStandDict)
             TaskPlayAnim(ped, lastStandDict, lastStandAnim, 1.0, 8.0, -1, 1, -1, false, false, false)
         end
         InLaststand = true
+        isEnteringLaststand = false
+        -- Set the status first, the server only accepts alerts from players that are down
+        TriggerServerEvent('hospital:server:SetLaststandStatus', true)
         TriggerServerEvent('hospital:server:ambulanceAlert', Lang:t('info.civ_down'))
         CreateThread(function()
             while InLaststand do
                 local player = PlayerId()
                 if LaststandTime - 1 > 0 then
                     LaststandTime = LaststandTime - 1
-                    Config.DeathTime = LaststandTime
                     Wait(1000)
                 else
                     -- Player bled out, transition to death
@@ -90,7 +55,7 @@ function SetLaststand(bool)
                         weaponLabel = weaponItem.label
                         weaponName = weaponItem.name
                     end
-                    TriggerServerEvent('qb-log:server:CreateLog', 'death', Lang:t('logs.death_log_title', { playername = GetPlayerName(-1), playerid = GetPlayerServerId(player) }), 'red', Lang:t('logs.death_log_message', { killername = killerName, playername = GetPlayerName(player), weaponlabel = weaponLabel, weaponname = weaponName }))
+                    TriggerServerEvent('qb-log:server:CreateLog', 'death', Lang:t('logs.death_log_title', { playername = GetPlayerName(player), playerid = GetPlayerServerId(player) }), 'red', Lang:t('logs.death_log_message', { killername = killerName, playername = GetPlayerName(player), weaponlabel = weaponLabel, weaponname = weaponName }))
                     deathTime = 0
                     OnDeath()
                     DeathTimer()
@@ -99,11 +64,14 @@ function SetLaststand(bool)
             end
         end)
     else
-        TaskPlayAnim(ped, lastStandDict, 'exit', 1.0, 8.0, -1, 1, -1, false, false, false)
+        isEnteringLaststand = false
+        if InLaststand then
+            TaskPlayAnim(ped, lastStandDict, 'exit', 1.0, 8.0, -1, 1, -1, false, false, false)
+        end
         InLaststand = false
         LaststandTime = 0
+        TriggerServerEvent('hospital:server:SetLaststandStatus', false)
     end
-    TriggerServerEvent('hospital:server:SetLaststandStatus', bool)
 end
 
 -- Events
@@ -118,7 +86,7 @@ end)
 
 RegisterNetEvent('hospital:client:UseFirstAid', function()
     if not isEscorting then
-        local player, distance = GetClosestPlayer()
+        local player, distance = QBCore.Functions.GetClosestPlayer()
         if player ~= -1 and distance < 1.5 then
             local playerId = GetPlayerServerId(player)
             TriggerServerEvent('hospital:server:UseFirstAid', playerId)
@@ -130,7 +98,7 @@ end)
 
 RegisterNetEvent('hospital:client:CanHelp', function(helperId)
     if InLaststand then
-        if LaststandTime <= 300 then
+        if LaststandTime <= Config.MinimumRevive then
             TriggerServerEvent('hospital:server:CanHelp', helperId, true)
         else
             TriggerServerEvent('hospital:server:CanHelp', helperId, false)
