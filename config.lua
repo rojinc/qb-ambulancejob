@@ -6,10 +6,10 @@ Config.WipeInventoryOnRespawn = true                         -- Enable or disabl
 Config.RespawnAtNearestHospital = true                       -- Enable or disable respawning at the closest hospital
 Config.Helicopter = 'polmav'                                 -- Helicopter model that players with the ambulance job can use
 Config.BillCost = 2000                                       -- Price that players are charged for using the hospital check-in system
-Config.DeathTime = 300                                       -- How long the timer is for players to bleed out completely and respawn at the hospital
+Config.DeathTime = 300                                       -- How long, in seconds, a dead player has to wait before they can respawn at the hospital
 Config.KnockdownTime = 40                                    -- How long the knockdown state lasts before going to bleeding state
 Config.ReviveInterval = 360                                  -- How long the timer is for players to revive a player in laststand
-Config.MinimumRevive = 300                                   -- How long the timer is for players to revive a player in laststand
+Config.MinimumRevive = 300                                   -- Players in laststand can be helped (and call for help) once their bleed out timer is at or below this, in seconds
 Config.PainkillerInterval = 60                               -- Set the length of time painkillers last (per one)
 Config.HealthDamage = 5                                      -- Minumum damage done to health before checking for injuries
 Config.ArmorDamage = 5                                       -- Minumum damage done to armor before checking for injuries
@@ -36,6 +36,9 @@ Config.MajorArmoredBleedChance = 45 -- The chance, in percent, that a player wil
 Config.MaxInjuryChanceMulti = 3     -- How many times the HealthDamage value above can divide into damage taken before damage is forced to be applied
 Config.DamageMinorToMajor = 35      -- How much damage would have to be applied for a minor weapon to be considered a major damage event. Put this at 100 if you want to disable it
 Config.AlertShowInfo = 2            -- How many injuries a player must have before being alerted about them
+Config.AlertCooldown = 15           -- Seconds a player has to wait between EMS alerts (/911e and downed alerts)
+Config.ArmInjuryDisableTime = 1000  -- How long, in milliseconds, an arm injury blocks steering left and aiming/firing
+Config.FuelResource = 'LegacyFuel'  -- Fuel resource used to fill job vehicles (it needs a SetFuel export)
 
 Config.Locations = {                -- Edit the various interaction points for players or create new ones
     ['checking'] = {
@@ -62,20 +65,6 @@ Config.Locations = {                -- Edit the various interaction points for p
     },
     ['stash'] = {
         vector3(309.78, -596.6, 43.29),
-    },
-    ['beds'] = {
-        { coords = vector4(353.1, -584.6, 43.11, 152.08),    taken = false, model = 1631638868 },
-        { coords = vector4(356.79, -585.86, 43.11, 152.08),  taken = false, model = 1631638868 },
-        { coords = vector4(354.12, -593.12, 43.1, 336.32),   taken = false, model = 2117668672 },
-        { coords = vector4(350.79, -591.8, 43.1, 336.32),    taken = false, model = 2117668672 },
-        { coords = vector4(346.99, -590.48, 43.1, 336.32),   taken = false, model = 2117668672 },
-        { coords = vector4(360.32, -587.19, 43.02, 152.08),  taken = false, model = -1091386327 },
-        { coords = vector4(349.82, -583.33, 43.02, 152.08),  taken = false, model = -1091386327 },
-        { coords = vector4(326.98, -576.17, 43.02, 152.08),  taken = false, model = -1091386327 },
-        --- paleto
-        { coords = vector4(-252.43, 6312.25, 32.34, 313.48), taken = false, model = 2117668672 },
-        { coords = vector4(-247.04, 6317.95, 32.34, 134.64), taken = false, model = 2117668672 },
-        { coords = vector4(-255.98, 6315.67, 32.34, 313.91), taken = false, model = 2117668672 },
     },
     ['jailbeds'] = {
         { coords = vector4(1761.96, 2597.74, 45.66, 270.14), taken = false, model = 2117668672 },
@@ -441,7 +430,7 @@ Config.Weapons = { -- Correspond weapon names to their class number
 }
 
 Config.VehicleSettings = { -- Enable or disable vehicle extras when pulling them from the ambulance job vehicle spawner
-    ['car1'] = {           -- Model name
+    ['car1'] = {           -- Model name, must match a model in Config.AuthorizedVehicles (car1/car2 are examples)
         ['extras'] = {
             ['1'] = false, -- on/off
             ['2'] = true,

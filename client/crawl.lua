@@ -6,6 +6,8 @@ local idleAnim = 'dead_d'
 local crawlDict = 'move_injured_ground'
 local crawlAnim = 'front_loop' -- Only use front_loop for all movement
 
+local turnSpeed = 30.0 -- Degrees per second
+
 -- Key mappings
 local INPUT_MOVE_UP_ONLY = 32
 local INPUT_MOVE_LEFT_ONLY = 34
@@ -13,18 +15,8 @@ local INPUT_MOVE_RIGHT_ONLY = 35
 
 -- Load animation dictionaries
 local function LoadCrawlDict()
-    if not HasAnimDictLoaded(crawlDict) then
-        RequestAnimDict(crawlDict)
-        while not HasAnimDictLoaded(crawlDict) do
-            Wait(10)
-        end
-    end
-    if not HasAnimDictLoaded(idleDict) then
-        RequestAnimDict(idleDict)
-        while not HasAnimDictLoaded(idleDict) do
-            Wait(10)
-        end
-    end
+    LoadAnimDict(crawlDict)
+    LoadAnimDict(idleDict)
 end
 
 -- Start crawling mode
@@ -81,16 +73,17 @@ CreateThread(function()
                     end
                 end
 
-                -- Turning left (A) - slower turn speed
+                -- Turning uses the frame time so the speed is the same at any FPS
+                local turnAmount = turnSpeed * GetFrameTime()
+
+                -- Turning left (A)
                 if IsControlPressed(0, INPUT_MOVE_LEFT_ONLY) then
-                    local heading = GetEntityHeading(ped)
-                    SetEntityHeading(ped, heading + 0.5)
+                    SetEntityHeading(ped, GetEntityHeading(ped) + turnAmount)
                 end
 
-                -- Turning right (D) - slower turn speed
+                -- Turning right (D)
                 if IsControlPressed(0, INPUT_MOVE_RIGHT_ONLY) then
-                    local heading = GetEntityHeading(ped)
-                    SetEntityHeading(ped, heading - 0.5)
+                    SetEntityHeading(ped, GetEntityHeading(ped) - turnAmount)
                 end
 
                 -- Disable ALL controls, then enable only WAD, mouse, and chat

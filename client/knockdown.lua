@@ -1,51 +1,43 @@
-Knockdown = Knockdown or {}
 IsKnockedDown = false
 KnockdownTime = 0
 IsBeingRevived = false
+local isEnteringKnockdown = false
 
 -- Functions
 
-local function LoadAnimation(dict)
-    while not HasAnimDictLoaded(dict) do
-        RequestAnimDict(dict)
-        Wait(100)
-    end
+local function IsTargetKnockedDown(serverId)
+    -- Set by the server as a replicated state bag, so no server call is needed
+    return Player(serverId).state.isKnockedDown == true
 end
 
 function SetKnockdown(bool)
     local ped = PlayerPedId()
     if bool then
+        -- Stops a second call from starting another knockdown timer
+        if IsKnockedDown or isEnteringKnockdown then return end
+        isEnteringKnockdown = true
         while GetEntitySpeed(ped) > 0.5 or IsPedRagdoll(ped) do Wait(10) end
-        local pos = GetEntityCoords(ped)
-        local heading = GetEntityHeading(ped)
+        -- Revived while falling, so don't go down after all
+        if not isEnteringKnockdown then return end
         TriggerServerEvent('InteractSound_SV:PlayOnSource', 'demo', 0.1)
         KnockdownTime = Config.KnockdownTime
 
-        if IsPedInAnyVehicle(ped) then
-            local veh = GetVehiclePedIsIn(ped)
-            local vehseats = GetVehicleModelNumberOfSeats(GetHashKey(GetEntityModel(veh)))
-            for i = -1, vehseats do
-                local occupant = GetPedInVehicleSeat(veh, i)
-                if occupant == ped then
-                    NetworkResurrectLocalPlayer(pos.x, pos.y, pos.z + 0.5, heading, true, false)
-                    SetPedIntoVehicle(ped, veh, i)
-                end
-            end
-        else
-            NetworkResurrectLocalPlayer(pos.x, pos.y, pos.z + 0.5, heading, true, false)
-        end
-
+        ResurrectPlayer(ped)
         SetEntityHealth(ped, 150)
+        -- Forget the hit that knocked the player down, so it doesn't count as new damage
+        ClearEntityLastDamageEntity(ped)
 
         if IsPedInAnyVehicle(ped, false) then
-            LoadAnimation('veh@low@front_ps@idle_duck')
+            LoadAnimDict('veh@low@front_ps@idle_duck')
             TaskPlayAnim(ped, 'veh@low@front_ps@idle_duck', 'sit', 1.0, 8.0, -1, 1, -1, false, false, false)
         end
         -- Ground animations are handled by crawl.lua
 
         IsKnockedDown = true
-        TriggerServerEvent('hospital:server:ambulanceAlert', Lang:t('info.civ_down'))
+        isEnteringKnockdown = false
+        -- Set the status first, the server only accepts alerts from players that are down
         TriggerServerEvent('hospital:server:SetKnockdownStatus', true)
+        TriggerServerEvent('hospital:server:ambulanceAlert', Lang:t('info.civ_down'))
 
         -- Knockdown timer thread
         CreateThread(function()
@@ -61,7 +53,9 @@ function SetKnockdown(bool)
             end
         end)
     else
+        isEnteringKnockdown = false
         IsKnockedDown = false
+        IsBeingRevived = false
         KnockdownTime = 0
         TriggerServerEvent('hospital:server:SetKnockdownStatus', false)
     end
@@ -81,10 +75,7 @@ CreateThread(function()
                 ClearEntityLastDamageEntity(ped)
             end
 
-            -- Force unarmed
-            SetCurrentPedWeapon(ped, `WEAPON_UNARMED`, true)
-
-            Wait(0)
+            Wait(100)
         else
             Wait(1000)
         end
@@ -99,10 +90,7 @@ CreateThread(function()
             if not IsPedInAnyVehicle(ped, false) then
                 -- Keep the idle animation playing while the minigame is active
                 if not IsEntityPlayingAnim(ped, 'dead', 'dead_d', 3) then
-                    RequestAnimDict('dead')
-                    while not HasAnimDictLoaded('dead') do
-                        Wait(10)
-                    end
+                    LoadAnimDict('dead')
                     TaskPlayAnim(ped, 'dead', 'dead_d', 1.0, 1.0, -1, 1, 0, false, false, false)
                 end
             end
@@ -113,31 +101,28 @@ end)
 
 -- Export for qb-target to check if player is knocked down
 exports('IsPlayerKnockedDown', function(entity)
-    local player = PlayerId()
     local targetPlayer = NetworkGetPlayerIndexFromPed(entity)
     if targetPlayer == -1 then return false end
-
-    local targetServerId = GetPlayerServerId(targetPlayer)
-    local isKnockedDown = false
-
-    QBCore.Functions.TriggerCallback('hospital:server:IsPlayerKnockedDown', function(result)
-        isKnockedDown = result
-    end, targetServerId)
-
-    Wait(100)
-    return isKnockedDown
+    return IsTargetKnockedDown(GetPlayerServerId(targetPlayer))
 end)
 
 -- Event: Someone starts reviving you
-RegisterNetEvent('hospital:client:BeingRevived', function(helperId)
+RegisterNetEvent('hospital:client:BeingRevived', function()
+    if not IsKnockedDown then return end
     IsBeingRevived = true
-    QBCore.Functions.Notify('You are being helped...', 'primary')
+    QBCore.Functions.Notify(Lang:t('success.being_helped'), 'primary')
+end)
+
+-- Event: The helper left or walked away before finishing
+RegisterNetEvent('hospital:client:ReviveCancelled', function()
+    IsBeingRevived = false
 end)
 
 -- Event: Revive was cancelled or failed
 RegisterNetEvent('hospital:client:ReviveFailed', function()
     IsBeingRevived = false
-    QBCore.Functions.Notify('Something went wrong...', 'error')
+    if not IsKnockedDown then return end
+    QBCore.Functions.Notify(Lang:t('error.revive_went_wrong'), 'error')
     SetKnockdown(false)
     SetLaststand(true)
 end)
@@ -166,9 +151,28 @@ RegisterNetEvent('hospital:client:ReviveSuccess', function()
         -- Update server status
         TriggerServerEvent('hospital:server:SetDeathStatus', false)
         TriggerServerEvent('hospital:server:SetLaststandStatus', false)
-
     end
 end)
+
+local function PlayReviveMinigame()
+    if GetResourceState('qb-minigames') == 'started' then
+        return exports['qb-minigames']:Skillbar()
+    end
+
+    -- Fallback when qb-minigames isn't running: a short progress bar
+    local p = promise.new()
+    QBCore.Functions.Progressbar('hospital_revive_knockdown', Lang:t('progress.revive'), 5000, false, true, {
+        disableMovement = true,
+        disableCarMovement = true,
+        disableMouse = false,
+        disableCombat = true,
+    }, {}, {}, {}, function()
+        p:resolve(true)
+    end, function()
+        p:resolve(false)
+    end)
+    return Citizen.Await(p)
+end
 
 -- Event: Attempt to revive a knocked down player
 RegisterNetEvent('hospital:client:ReviveKnockedDown', function(targetId)
@@ -177,16 +181,12 @@ RegisterNetEvent('hospital:client:ReviveKnockedDown', function(targetId)
     local animName = 'weed_spraybottle_crouch_spraying_01_inspector'
 
     -- Load and play reviver animation in background
-    RequestAnimDict(animDict)
     CreateThread(function()
-        while not HasAnimDictLoaded(animDict) do
-            Wait(10)
-        end
+        LoadAnimDict(animDict)
         TaskPlayAnim(ped, animDict, animName, 1.0, 8.0, -1, 1, 0, false, false, false)
     end)
 
-    -- Start minigame (qb-minigames Skillbar)
-    local success = exports['qb-minigames']:Skillbar()
+    local success = PlayReviveMinigame()
     ClearPedTasks(ped)
     if success then
         TriggerServerEvent('hospital:server:ReviveKnockedDownSuccess', targetId)
@@ -197,11 +197,16 @@ end)
 
 -- Add qb-target interaction for knocked down players
 CreateThread(function()
+    if GetResourceState('qb-target') == 'missing' then
+        print('^3[qb-ambulancejob] qb-target is not installed, knocked down players can only be revived by EMS^7')
+        return
+    end
+
     exports['qb-target']:AddGlobalPlayer({
         options = {
             {
                 icon = 'fas fa-hand-holding-medical',
-                label = 'Revive Player',
+                label = Lang:t('text.revive'),
                 action = function(entity)
                     local targetPlayer = NetworkGetPlayerIndexFromPed(entity)
                     if targetPlayer == -1 then return end
@@ -209,20 +214,13 @@ CreateThread(function()
                     TriggerServerEvent('hospital:server:AttemptReviveKnockedDown', targetServerId)
                 end,
                 canInteract = function(entity)
+                    if isDead or InLaststand or IsKnockedDown then return false end
                     if not entity or not DoesEntityExist(entity) or not IsPedAPlayer(entity) then
                         return false
                     end
                     local targetPlayer = NetworkGetPlayerIndexFromPed(entity)
                     if targetPlayer == -1 or targetPlayer == PlayerId() then return false end
-
-                    -- Check if target is knocked down via server
-                    local targetServerId = GetPlayerServerId(targetPlayer)
-                    local canRevive = false
-                    QBCore.Functions.TriggerCallback('hospital:server:IsPlayerKnockedDown', function(result)
-                        canRevive = result
-                    end, targetServerId)
-                    Wait(50)
-                    return canRevive
+                    return IsTargetKnockedDown(GetPlayerServerId(targetPlayer))
                 end
             }
         },

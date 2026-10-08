@@ -27,7 +27,7 @@ The ambulance job now includes a complete knockdown system that provides an inte
 - **Knockdown Mechanics**: When players take damage, they enter a knockdown state instead of immediately going to laststand/bleeding
 - **Duration**: Players remain knocked down for a configurable duration (default: 40 seconds) before transitioning to bleeding state
 - **Animations**: Supports different animations based on player location (ground or vehicle)
-- **Revival**: EMS can revive knocked down players using a skillbar minigame without requiring a full revive
+- **Revival**: Nearby players can revive knocked down players using a skillbar minigame (through qb-target) without requiring a full revive
 - **Damage During Knockdown**: Taking any damage while knocked down immediately transitions the player to bleeding state
 - **State Management**: Players are disarmed during knockdown and stay immobilized with appropriate animations
 
@@ -37,17 +37,22 @@ The knockdown feature can be configured in `config.lua`:
 
 ```lua
 Config.KnockdownTime = 40       -- How long the knockdown state lasts before going to bleeding state
-Config.ReviveInterval = 360     -- How long the timer is for players to revive a player in laststand
-Config.MinimumRevive = 300      -- How long the timer is for players to revive a player in laststand
+Config.ReviveInterval = 360     -- How long the bleed out timer is for players in laststand
+Config.MinimumRevive = 300      -- Players in laststand can be helped once their bleed out timer is at or below this
+Config.AlertCooldown = 15       -- Seconds a player has to wait between EMS alerts
+Config.FuelResource = 'LegacyFuel' -- Fuel resource used to fill job vehicles (needs a SetFuel export)
 ```
 
 ## Dependencies
 
 - [qb-core](https://github.com/qbcore-framework/qb-core) (Required)
-- [qb-phone](https://github.com/qbcore-framework/qb-phone) (Required)
-- [qb-target](https://github.com/BerkieBb/qb-target) (Optional)
+- [qb-inventory](https://github.com/qbcore-framework/qb-inventory) (Required)
+- [oxmysql](https://github.com/overextended/oxmysql) (Required)
 - [PolyZone](https://github.com/mkafrin/PolyZone) (Required)
-- [qb-minigames](https://github.com/qbcore-framework/qb-minigames) (Required for knockdown revive skillbar)
+- [qb-target](https://github.com/BerkieBb/qb-target) (Optional, needed for the knockdown revive option)
+- [qb-minigames](https://github.com/qbcore-framework/qb-minigames) (Optional, knockdown revive skillbar; falls back to a progress bar)
+- [qb-phone](https://github.com/qbcore-framework/qb-phone) (Optional, hospital bill emails)
+- [qb-banking](https://github.com/qbcore-framework/qb-banking) (Optional, hospital bills are paid to the ambulance account)
 
 ## Setup
 
